@@ -15,6 +15,7 @@ from torchvision.utils import make_grid
 from torchvision.datasets import ImageFolder
 from torchsummary import summary
 
+###############################################
 # Download latest version (Already done + moved)
 # path = kagglehub.dataset_download("vipoooool/new-plant-diseases-dataset", "data")
 # print("Path to dataset files:", path)
@@ -33,9 +34,9 @@ print("Total disease classes are: {}".format(len(diseases)))
 
 # Transformations for the images
 transform = transforms.Compose([
-    transforms.Resize((256, 256)),    # Resize images to 256x256
-    transforms.ToTensor(),            # Convert images to PyTorch tensors
-    transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]), # Normalization for ResNet
+    transforms.Resize((256, 256)),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
 ])
 
 # Load datasets
@@ -43,20 +44,20 @@ train_dataset = ImageFolder(root=training_path, transform=transform)
 test_dataset = ImageFolder(root=testing_path, transform=transform)
 
 # Data loaders
-batch_size = 32
+batch_size = 32 # Could probably do 64 with remaining VRAM but 32 is quick enough
 train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
 # Define ResNet-18 model
 model = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1)
-model.fc = nn.Linear(model.fc.in_features, len(diseases))  # Adjust the final layer for 38 classes
+model.fc = nn.Linear(model.fc.in_features, len(diseases))  # Adjust for 38 classes
 
-# Move model to DirectML device
+# Move model to GPU
 model = model.to(dml)
 
 # Define loss function and optimizer
 criterion = nn.CrossEntropyLoss()
-# Example: Using SGD instead of Adam
+# Example: Using SGD instead of Adam (Adam gave me errors with DirectML I believe)
 optimizer = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
 
 # Training function
@@ -104,15 +105,18 @@ def test(model, test_loader, criterion, device):
     epoch_loss = running_loss / len(test_loader)
     accuracy = 100 * correct / total
     print(f"Testing Loss: {epoch_loss:.4f}, Accuracy: {accuracy:.2f}%")
+    return accuracy
 
 # Training and evaluation loop
+# Save the model
+model_path = "plant_disease_model.pth"
 num_epochs = 10
+best_accuracy = 0.0
 for epoch in range(num_epochs):
     print(f"Epoch {epoch+1}/{num_epochs}")
     train(model, train_loader, criterion, optimizer, dml)
-    test(model, test_loader, criterion, dml)
-
-# Save the model
-model_path = "plant_disease_model.pth"
-torch.save(model.state_dict(), model_path)
-print(f"Model saved to {model_path}")
+    accuracy = test(model, test_loader, criterion, dml)
+    if (accuracy > best_accuracy):
+        best_accuracy = accuracy
+        torch.save(model.state_dict(), model_path)
+        print(f"Model saved to {model_path} with {best_accuracy} accuracy")

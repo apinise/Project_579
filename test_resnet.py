@@ -20,26 +20,12 @@ from sklearn.metrics import classification_report
 import seaborn as sns
 
 def predict_image(image_path, model, device, transform, class_names):
-    """
-    Predicts the class of an image using a trained model.
 
-    Args:
-        image_path (str): Path to the image.
-        model (torch.nn.Module): Trained PyTorch model.
-        device (torch.device): Device to run inference on.
-        transform (torchvision.transforms.Compose): Transformations to apply to the image.
-        class_names (list): List of class names (disease labels).
-
-    Returns:
-        str: Predicted class label.
-    """
     # Load the image
     image = Image.open(image_path).convert('RGB')
+    input_tensor = transform(image).unsqueeze(0)
 
-    # Apply transformations
-    input_tensor = transform(image).unsqueeze(0)  # Add batch dimension
-
-    # Move to device
+    # Move to GPU
     input_tensor = input_tensor.to(device)
 
     # Make prediction
@@ -53,17 +39,6 @@ def predict_image(image_path, model, device, transform, class_names):
     return predicted_label
 
 def calculate_test_accuracy(model, test_loader, device, classes):
-    """
-    Calculate the accuracy of the model on the entire test set.
-
-    Parameters:
-    - model: Trained PyTorch model.
-    - test_loader: DataLoader for the test set.
-    - device: Device on which the model is running.
-
-    Returns:
-    - accuracy: Test accuracy as a percentage.
-    """
     model.eval()  # Set the model to evaluation mode
     correct = 0
     total = 0
@@ -101,41 +76,6 @@ def calculate_test_accuracy(model, test_loader, device, classes):
     plt.show()
     return accuracy
 
-def plot_confusion_matrix(model, data_loader, device, classes):
-    model.eval()
-    y_true = []
-    y_pred = []
-    with torch.no_grad():
-        for inputs, labels in data_loader:
-            inputs, labels = inputs.to(device), labels.to(device)
-            outputs = model(inputs)
-            _, predicted = torch.max(outputs, 1)
-            y_true.extend(labels.cpu().numpy())
-            y_pred.extend(predicted.cpu().numpy())
-    
-    cm = confusion_matrix(y_true, y_pred)
-    plt.figure(figsize=(12, 10))
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=classes, yticklabels=classes)
-    plt.xlabel('Predicted')
-    plt.ylabel('Actual')
-    plt.title('Confusion Matrix')
-    plt.show()
-
-def classification_metrics(model, data_loader, device, classes):
-    model.eval()
-    y_true = []
-    y_pred = []
-    with torch.no_grad():
-        for inputs, labels in data_loader:
-            inputs, labels = inputs.to(device), labels.to(device)
-            outputs = model(inputs)
-            _, predicted = torch.max(outputs, 1)
-            y_true.extend(labels.cpu().numpy())
-            y_pred.extend(predicted.cpu().numpy())
-    
-    report = classification_report(y_true, y_pred, target_names=classes)
-    print(report)
-    
 dml = torch_directml.device(1)
 dataset_path = './data/vipoooool/new-plant-diseases-dataset/versions/2/New Plant Diseases Dataset(Augmented)/New Plant Diseases Dataset(Augmented)'
 training_path = dataset_path + '/train'
@@ -144,9 +84,9 @@ diseases = os.listdir(training_path)
 
 # Transformations for the images
 transform = transforms.Compose([
-    transforms.Resize((256, 256)),    # Resize images to 256x256
-    transforms.ToTensor(),            # Convert images to PyTorch tensors
-    transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]), # Normalization for ResNet
+    transforms.Resize((256, 256)),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
 ])
 
 batch_size = 32
@@ -155,7 +95,7 @@ test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
 # Recreate the model architecture
 loaded_model = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1)
-loaded_model.fc = nn.Linear(loaded_model.fc.in_features, len(diseases))  # Match number of classes
+loaded_model.fc = nn.Linear(loaded_model.fc.in_features, len(diseases))
 loaded_model = loaded_model.to(dml)  # Move to DirectML device
 
 # Load the saved weights
@@ -164,16 +104,10 @@ loaded_model.load_state_dict(torch.load(model_path))
 loaded_model.eval()  # Set to evaluation mode
 print("Model loaded successfully.")
 
-# Call the function after testing
-#classification_metrics(loaded_model, test_loader, dml, diseases)
-
-#plot_confusion_matrix(loaded_model, test_loader, dml, diseases)
-
 # Calculate test accuracy
 test_accuracy = calculate_test_accuracy(loaded_model, test_loader, dml, diseases)
 print(f"Test Accuracy: {test_accuracy:.2f}%")
 
-# Path to your image
 image_paths = [
     "infected_1_256x256.jpg",
     "infected_2_256x256.jpg",
@@ -194,7 +128,7 @@ for ax, image_path, label in zip(axes, image_paths, predicted_labels):
     image = Image.open(image_path).convert("RGB")
     ax.imshow(image)
     ax.set_title(label)
-    ax.axis("off")  # Hide axes
+    ax.axis("off")
 
 plt.tight_layout()
 plt.show()
